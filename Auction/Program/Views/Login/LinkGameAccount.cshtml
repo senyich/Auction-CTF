@@ -5,7 +5,7 @@
 <div class="container">
     <h1 class="">Input your game account</h1>
     <div asp-validation-summary="All"></div>
-    <form id="login-form" asp-action="Login" method="post" asp-route-returnUrl="@(ViewBag.ReturnUrl ?? "/")">
+    <form id="login-form" asp-action="LinkGameAccount" method="post" asp-route-returnUrl="@(ViewBag.ReturnUrl ?? "/")">
         <label asp-for="Username">Login</label>
         <input asp-for="Username" />
         <label asp-for ="Password">Password</label>
@@ -15,23 +15,6 @@
 </div>
 
 <style>
-    .field-validation-error {
-        color: red;
-    }
-
-    /* Input field */
-    input.input-validation-error {
-        border: 1px solid #b94a48;
-    }
-
-    input.valid {
-        border: 1px solid #16a085;
-    }
-
-    /* ValidationSummaryTagHelper */
-    .validation-summary-errors {
-        color: #b94a48;
-    }
     .container{
         display:flex;
         flex-direction: column;

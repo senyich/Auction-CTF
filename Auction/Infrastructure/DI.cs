@@ -2,11 +2,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Infrastructure.Services;
+using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Infrastructure
 {
@@ -17,6 +15,15 @@ namespace Infrastructure
             var connectionString = configuration.GetConnectionString("SqliteConnectionString");
             services.AddDbContext<AppDbContext>(x => x.UseSqlite(connectionString));
             services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());
+            services.AddScoped<DefaultDataHelper>();
+            services.AddScoped<ITokenService>(provider =>
+            {
+                var jwtSection = configuration.GetSection("JwtSettings");
+                var dbContext = provider.GetRequiredService<IAppDbContext>(); 
+                return new JwtTokenService(jwtSection["SecretKey"]!.ToString(),
+                    jwtSection["Audience"]!.ToString(),
+                    jwtSection["Issuer"]!.ToString(), dbContext);
+            });
             return services;
         }
     }

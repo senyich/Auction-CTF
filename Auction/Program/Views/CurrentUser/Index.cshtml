@@ -21,7 +21,7 @@
         @{
             if(Model.Currencies.Count == 0)
             {
-                <span class="prohibition">Cant buyout</span>
+                <span class="prohibition">No currencies</span>
             }
             else
             {
@@ -46,7 +46,7 @@
         else{
             <div class="profile-control-button">
                 Link Game Account
-                <a asp-action="LinkGameAccount"></a>
+                <a asp-action="LinkGameAccount" asp-controller="Login"></a>
             </div>
         }
         <div class="profile-control-button profile-payment-href">

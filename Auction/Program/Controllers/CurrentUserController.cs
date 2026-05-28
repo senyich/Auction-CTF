@@ -12,13 +12,12 @@ using Application.Logic.Item;
 using Program.ViewModels.Dto;
 using Application.Logic.Lot;
 using Auction;
+using Application.Common;
 
 namespace Program.Controllers
 {
     [Route("[controller]/[action]")]
     public class CurrentUserController(IMediator mdtr, 
-        LoginService loginService, 
-        DataServerApiService apiService,
         LotsManagementAndPaymentService paymentService) : Controller
     {
         [Authorize]
@@ -62,44 +61,6 @@ namespace Program.Controllers
                 });
             return View(new CurrentUserItemsViewModel(
                 (await Task.WhenAll(itemsTasks)).ToList()));
-        }
-        [Authorize]
-        [HttpGet]
-        public IActionResult LinkGameAccount()
-        {
-            ViewBag.SelectedPageName = "Account";
-            return View();
-        }
-        [Authorize]
-        [HttpPost]
-        public async Task<IActionResult> LinkGameAccount(LoginGameRequest loginRequest)
-        {
-            Guid userId = Guid.Parse(HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            string username = HttpContext.User.FindFirstValue(ClaimTypes.Name)!;
-            if (!ModelState.IsValid)
-                return View(loginRequest);
-            var userGameIdResult = await apiService.RequestUserId(loginRequest.Username, loginRequest.Password);
-            if (userGameIdResult.Failed)
-            {
-                ModelState.AddModelError("Validate", "Wrong password or login");
-                return View(loginRequest);
-            }
-            var userGameId = userGameIdResult.Data!;
-            await loginService.LinkUser(userId, userGameId);
-            var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.Name, username),
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(StaticAttributes.HasLinkedAccountPolicyClaim, userGameId.ToString())
-        };
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-            var authProperties = new AuthenticationProperties { IsPersistent = true };
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
-            return RedirectToAction("Index", "currentUser");
         }
     }
 }

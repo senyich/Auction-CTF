@@ -10,6 +10,7 @@ namespace Application.Interfaces
 {
     public interface IAppDbContext
     {
+        DbSet<RefreshToken> RefreshTokens { get; set; }
         DbSet<Item> Items { get; set; }
         DbSet<Lot> Lots { get; set; }
         DbSet<Invoice> Invoices { get; set; }

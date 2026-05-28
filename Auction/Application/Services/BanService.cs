@@ -3,7 +3,6 @@ using Application.Common;
 
 public class BanService
 {
-    // Список забаненных: IP и время окончания бана
     private readonly ConcurrentDictionary<string, DateTime> _bannedIps = new();
 
     public void Ban(string ip, TimeSpan duration) =>
@@ -15,7 +14,7 @@ public class BanService
         {
             if (DateTime.UtcNow < expiry) 
                 return Result.Ok(expiry);
-            _bannedIps.TryRemove(ip, out _); // Снимаем бан по истечении времени
+            _bannedIps.TryRemove(ip, out _);
         }
         return Result<DateTime>.Fail();
     }

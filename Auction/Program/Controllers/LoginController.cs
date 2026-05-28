@@ -13,11 +13,20 @@ using Program.ViewModels;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.RateLimiting;
 using Auction;
+using Application.Common;
+using Application.Interfaces;
+using Microsoft.AspNetCore.Authentication.OAuth;
+using System.Security.Cryptography;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
+using Parbad.Internal;
 
 namespace Program.Controllers
 {
     [Route("authorization/[action]")]
-    public class LoginController(LoginService loginService, IMediator mdtr) : Controller
+    public class LoginController(LoginService loginService, IMediator mdtr,
+        DataServerApiService apiService, ITokenService tokenService) : Controller
     {
         [HttpGet]
         [Route("/authorization")]
@@ -44,22 +53,12 @@ namespace Program.Controllers
                 return View(loginRequest);
             }
             var userId = userIdResult.Data!;
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, loginRequest.Username),
-                new Claim(ClaimTypes.NameIdentifier, userId.ToString())
-            };
-            var getUserByIdResult = await mdtr.Send(new GetUserByIdQuery(userId));
-            if (getUserByIdResult.Success && getUserByIdResult.Data!.OriginalId is not null)
-                claims.Add(new Claim(StaticAttributes.HasLinkedAccountPolicyClaim, getUserByIdResult.Data!.OriginalId));
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-            var authProperties = new AuthenticationProperties { IsPersistent = true };
 
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            var accessToken = tokenService.GetAccessToken(userId);
+            var refreshToken = tokenService.GetRefreshToken(userId);
+
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtAccessTokenName, accessToken);
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtRefreshTokenName, refreshToken);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                 return Redirect(returnUrl);
@@ -85,19 +84,12 @@ namespace Program.Controllers
                 return View(registerRequest);
             }
             var userId = userIdResult.Data!;
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, registerRequest.Username),
-                new Claim(ClaimTypes.NameIdentifier, userId.ToString())
-            };
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-            var authProperties = new AuthenticationProperties { IsPersistent = true };
 
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            var accessToken = tokenService.GetAccessToken(userId);
+            var refreshToken = tokenService.GetRefreshToken(userId);
+
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtAccessTokenName, accessToken);
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtRefreshTokenName, refreshToken);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                 return Redirect(returnUrl);
@@ -105,10 +97,69 @@ namespace Program.Controllers
         }
         [Authorize]
         [HttpGet]
-        public async Task<IActionResult> Logout()
+        public IActionResult Logout()
         {
-            await HttpContext.SignOutAsync();
+            HttpContext.Response.Cookies.Delete(StaticAttributes.JwtAccessTokenName);
+            HttpContext.Response.Cookies.Delete(StaticAttributes.JwtRefreshTokenName);
             return RedirectToAction("Index", "Home");
+        }
+        [Authorize]
+        [HttpGet]
+        public IActionResult LinkGameAccount()
+        {
+            ViewBag.SelectedPageName = "Account";
+            return View();
+        }
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> LinkGameAccount(LoginGameRequest loginRequest)
+        {
+            Guid userId = HttpContext.User.GetUserId();
+            if (!ModelState.IsValid)
+                return View(loginRequest);
+            var userGameIdResult = await apiService.RequestUserId(loginRequest.Username, loginRequest.Password);
+            if (userGameIdResult.Failed)
+            {
+                ModelState.AddModelError("Validate", "Wrong password or login");
+                return View(loginRequest);
+            }
+            var userGameId = userGameIdResult.Data!;
+            await loginService.LinkUser(userId, userGameId);
+
+            var accessToken = tokenService.GetAccessToken(userId);
+            var refreshToken = tokenService.GetRefreshToken(userId);
+
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtAccessTokenName, accessToken);
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtRefreshTokenName, refreshToken);
+
+            return RedirectToAction("Index", "currentUser");
+        }
+        [HttpGet]
+        public IActionResult Refresh([FromQuery]string? returnUrl)
+        {
+            var refreshToken = HttpContext.Request.Cookies[StaticAttributes.JwtRefreshTokenName];
+            var accessToken = HttpContext.Request.Cookies[StaticAttributes.JwtAccessTokenName];
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                TempData["ErrorMessage"] = "Couldn't find the token";
+                return Redirect("/authorization");
+            }
+            var userId = tokenService.GetPrincipalFromExpiredToken(accessToken).GetUserId();
+            if (tokenService.IsRefreshTokenEmptyOrExpired(refreshToken, userId))
+            {
+                TempData["ErrorMessage"] = "Refresh token expired";
+                return Redirect("/authorization");
+            }
+
+            var newAccessToken = tokenService.GetAccessToken(userId);
+            var newRefreshToken = tokenService.GetRefreshToken(userId);
+
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtAccessTokenName, newAccessToken);
+            HttpContext.Response.Cookies.Append(StaticAttributes.JwtRefreshTokenName, newRefreshToken);
+
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
+            return RedirectToAction("User", "Index");
         }
     }
 }

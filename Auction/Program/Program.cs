@@ -1,17 +1,24 @@
 using Application;
+using Application.Common;
 using Application.Interfaces;
 using Application.Logic.User;
 using Application.Services;
 using Domain.Models;
 using Infrastructure;
+using Infrastructure.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
 using Parbad.Builder;
 using Parbad.Gateway.ParbadVirtual;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using System.Threading.RateLimiting;
 
 namespace Auction
@@ -20,7 +27,11 @@ namespace Auction
     {
         public static void Main(string[] args)
         {
+            JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
             var builder = WebApplication.CreateBuilder(args);
+            var jwtSection = builder.Configuration.GetSection("JwtSettings");
+
 
             builder.Services.AddControllersWithViews();
             builder.Services.AddInfastructureLayer(builder.Configuration);
@@ -59,13 +70,42 @@ namespace Auction
                     options.Window = TimeSpan.FromSeconds(15);
                 });
             });
-
-            builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-                .AddCookie(p =>
+            builder.Services.AddAuthentication(options =>{
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    p.LoginPath = "/authorization";
-                    p.AccessDeniedPath = "/unauthorized";
-                });
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = jwtSection["Issuer"]!.ToString(),
+                    ValidAudience = jwtSection["Audience"]!.ToString(),
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(jwtSection["SecretKey"]!.ToString())),
+                    ClockSkew = TimeSpan.Zero
+                };
+
+                options.Events = new JwtBearerEvents()
+                {
+                    OnMessageReceived = context =>
+                    {
+                        context.Token = context.Request.Cookies[StaticAttributes.JwtAccessTokenName];
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = async context =>
+                    {
+                        if (context.Handled) return;
+                        context.HandleResponse();
+                        await Console.Out.WriteLineAsync(context.HttpContext.Request.Path + context.HttpContext.Request.QueryString);
+                        context.Response.Redirect(QueryHelpers.AddQueryString("/authorization/refresh", 
+                            "returnUrl", context.HttpContext.Request.Path+context.HttpContext.Request.QueryString));
+                    }
+                };
+            });
             builder.Services.AddAuthorization(opts =>
             {
                 opts.AddPolicy(StaticAttributes.HasLinkedAccountPolicyName, p =>
@@ -105,6 +145,16 @@ namespace Auction
 
             app.UseSwagger();
             app.UseSwaggerUI();
+
+            app.UseRouting();
+            app.UseStatusCodePages(async context =>
+            {
+                var response = context.HttpContext.Response;
+                if (response.StatusCode == StatusCodes.Status403Forbidden)
+                {
+                    response.Redirect("/unauthorized");
+                }
+            });
 
             app.UseAuthentication();
             app.UseAuthorization();

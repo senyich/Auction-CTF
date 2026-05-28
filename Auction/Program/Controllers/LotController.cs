@@ -16,6 +16,7 @@ using Application.Logic.Lot;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using Application.Logic.ArchiveLot;
 using Auction;
+using Application.Common;
 
 namespace Program.Controllers
 {
