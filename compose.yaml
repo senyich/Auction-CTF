@@ -1,0 +1,24 @@
+services:
+  auction:
+    build:
+      context: .
+      dockerfile: Auction/Dockerfile
+    depends_on:
+      - dataserver
+    environment:
+      DataServer__BaseUrl: http://dataserver:8080
+    ports:
+      - "${AUCTION_PORT:-5057}:8080"
+    volumes:
+      - auction-data:/app/data
+
+  dataserver:
+    build:
+      context: .
+      dockerfile: DataServer/Dockerfile
+    volumes:
+      - dataserver-data:/app/data
+
+volumes:
+  auction-data:
+  dataserver-data:

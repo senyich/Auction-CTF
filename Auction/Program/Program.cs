@@ -44,7 +44,8 @@ namespace Auction
             builder.Services.AddScoped<CmdService>();
             builder.Services.AddHostedService<CmdListenerService>();
             builder.Services.AddSingleton<BanService>();
-            builder.Services.AddTransient(p=>new DataServerApiService(StaticAttributes.DataServerHostName));
+            var dataServerUrl = builder.Configuration["DataServer:BaseUrl"] ?? StaticAttributes.DataServerHostName;
+            builder.Services.AddTransient(_ => new DataServerApiService(dataServerUrl));
             builder.Services.AddSwaggerGen();
 
             builder.WebHost.ConfigureKestrel(options =>

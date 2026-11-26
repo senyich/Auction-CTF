@@ -121,7 +121,8 @@ public class CmdListenerService(IServiceProvider _serviceProvider,
             while (!cancellationToken.IsCancellationRequested)
             {
                 var input = await Task.Run(() => Console.ReadLine(), cancellationToken);
-                if (string.IsNullOrEmpty(input)) continue;
+                if (input is null) break;
+                if (input.Length == 0) continue;
                 var scope = _serviceProvider.CreateScope();
                 await scope.ServiceProvider.GetRequiredService<CmdService>().ExecuteAsync(input);
             }
